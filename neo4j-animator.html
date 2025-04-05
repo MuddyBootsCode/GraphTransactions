@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Basic Neo4j Transaction Animator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      background-color: #f5f5f5;
+    }
+    
+    .header {
+      background-color: #2B7CE9;
+      color: white;
+      padding: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+    
+    .button-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background-color: #2B7CE9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    button:hover {
+      background-color: #1b5fbd;
+    }
+    
+    .graph-container {
+      height: 400px;
+      border: 1px solid #ddd;
+      background-color: white;
+      margin-bottom: 20px;
+    }
+    
+    .details-container {
+      background-color: white;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .details-container h3 {
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+    
+    .transaction-info {
+      margin-bottom: 15px;
+      font-size: 16px;
+    }
+    
+    pre {
+      background-color: #f8f8f8;
+      padding: 10px;
+      border-radius: 4px;
+      overflow: auto;
+      max-height: 150px;
+    }
+    
+    .status {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #2B7CE9;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Neo4j Transaction Animator</h1>
+  </div>
+  
+  <div class="container">
+    <div class="button-container">
+      <button id="load-data-btn" onclick="loadExampleData()">Load Example Data</button>
+      <input type="file" id="file-upload" accept=".json" style="display: none;" onchange="handleFileUpload(event)">
+      <button id="upload-btn" onclick="document.getElementById('file-upload').click()">Upload JSON</button>
+      <button id="next-btn" onclick="nextTransaction()" disabled>Next Transaction</button>
+      <button id="reset-btn" onclick="resetVisualization()" disabled>Reset</button>
+    </div>
+    
+    <div class="transaction-info">
+      Transaction: <span id="tx-counter">0 / 0</span>
+    </div>
+    
+    <div id="graph-container" class="graph-container"></div>
+    
+    <div class="details-container">
+      <h3>Transaction Details</h3>
+      <pre id="tx-details">No transaction data loaded. Click "Load Example Data" to start.</pre>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+  
+  <script>
+    // Global variables
+    let transactions = [];
+    let currentIndex = 0;
+    let nodes = new vis.DataSet();
+    let edges = new vis.DataSet();
+    let network = null;
+    
+    // Initialize the visualization
+    function initializeVisualization() {
+      const container = document.getElementById('graph-container');
+      const data = { nodes, edges };
+      const options = {
+        nodes: {
+          shape: 'dot',
+          size: 16,
+          font: { size: 14 },
+          borderWidth: 2,
+          shadow: true
+        },
+        edges: {
+          width: 2,
+          shadow: true,
+          arrows: { to: { enabled: true, scaleFactor: 0.5 } }
+        },
+        physics: {
+          stabilization: true
+        }
+      };
+      
+      network = new vis.Network(container, data, options);
+      updateStatus("Visualization initialized. Ready to load data.");
+    }
+    
+    // Load example transaction data
+    function loadExampleData() {
+      updateStatus("Loading example data...");
+      
+      // Sample transaction data
+      transactions = [
+        {
+          id: "tx1",
+          timestamp: "2025-04-05T09:15:00Z",
+          query: "CREATE (p:Product {id: 'p1', name: 'Smartphone X1', price: 899.99})",
+          changes: {
+            nodes: {
+              created: [
+                {
+                  id: "node1",
+                  labels: ["Product"],
+                  properties: {
+                    id: "p1",
+                    name: "Smartphone X1",
+                    price: 899.99
+                  }
+                }
+              ],
+              modified: [],
+              deleted: []
+            },
+            relationships: {
+              created: [],
+              modified: [],
+              deleted: []
+            }
+          }
+        },
+        {
+          id: "tx2",
+          timestamp: "2025-04-05T09:16:30Z",
+          query: "CREATE (c:Customer {id: 'c1', name: 'Alice Smith', email: 'alice@example.com'})",
+          changes: {
+            nodes: {
+              created: [
+                {
+                  id: "node2",
+                  labels: ["Customer"],
+                  properties: {
+                    id: "c1",
+                    name: "Alice Smith",
+                    email: "alice@example.com"
+                  }
+                }
+              ],
+              modified: [],
+              deleted: []
+            },
+            relationships: {
+              created: [],
+              modified: [],
+              deleted: []
+            }
+          }
+        },
+        {
+          id: "tx3",
+          timestamp: "2025-04-05T09:19:00Z",
+          query: "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p1'}) CREATE (c)-[r:VIEWED {timestamp: datetime()}]->(p)",
+          changes: {
+            nodes: {
+              created: [],
+              modified: [],
+              deleted: []
+            },
+            relationships: {
+              created: [
+                {
+                  id: "rel1",
+                  type: "VIEWED",
+                  startNodeId: "node2",
+                  endNodeId: "node1",
+                  properties: {
+                    timestamp: "2025-04-05T09:19:00Z"
+                  }
+                }
+              ],
+              modified: [],
+              deleted: []
+            }
+          }
+        },
+        {
+          id: "tx4",
+          timestamp: "2025-04-05T09:22:30Z",
+          query: "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p1'}) CREATE (c)-[r:PURCHASED {timestamp: datetime(), quantity: 1, total: 899.99}]->(p)",
+          changes: {
+            nodes: {
+              created: [],
+              modified: [],
+              deleted: []
+            },
+            relationships: {
+              created: [
+                {
+                  id: "rel2",
+                  type: "PURCHASED",
+                  startNodeId: "node2",
+                  endNodeId: "node1",
+                  properties: {
+                    timestamp: "2025-04-05T09:22:30Z",
+                    quantity: 1,
+                    total: 899.99
+                  }
+                }
+              ],
+              modified: [],
+              deleted: []
+            }
+          }
+        }
+      ];
+      
+      // Reset visualization
+      resetVisualization();
+      
+      // Update UI
+      document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      document.getElementById('next-btn').disabled = false;
+      document.getElementById('reset-btn').disabled = false;
+      
+      updateTransactionDetails();
+      updateStatus(`Loaded ${transactions.length} transactions. Click "Next Transaction" to start visualization.`);
+    }
+    
+    // Handle file upload
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const jsonData = JSON.parse(e.target.result);
+          
+          // Validate the JSON structure
+          if (!Array.isArray(jsonData)) {
+            throw new Error("Uploaded file must contain an array of transactions");
+          }
+
+          // Basic validation of transaction structure
+          jsonData.forEach((tx, index) => {
+            if (!tx.id || !tx.timestamp || !tx.query || !tx.changes) {
+              throw new Error(`Invalid transaction structure at index ${index}`);
+            }
+          });
+
+          // If validation passes, load the data
+          transactions = jsonData;
+          
+          // Reset visualization
+          resetVisualization();
+          
+          // Update UI
+          document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+          document.getElementById('next-btn').disabled = false;
+          document.getElementById('reset-btn').disabled = false;
+          
+          updateTransactionDetails();
+          updateStatus(`Loaded ${transactions.length} transactions from file. Click "Next Transaction" to start visualization.`);
+        } catch (error) {
+          updateStatus(`Error loading file: ${error.message}`);
+          console.error("File upload error:", error);
+        }
+      };
+      reader.readAsText(file);
+    }
+    
+    // Process the next transaction
+    function nextTransaction() {
+      if (currentIndex >= transactions.length) {
+        updateStatus("End of transaction sequence reached.");
+        return;
+      }
+      
+      const tx = transactions[currentIndex];
+      updateStatus(`Applying transaction ${currentIndex + 1}: ${tx.id}`);
+      
+      // Process node creations
+      if (tx.changes.nodes && tx.changes.nodes.created) {
+        tx.changes.nodes.created.forEach(node => {
+          const nodeLabel = node.labels.join(':');
+          const nodeName = node.properties.name || node.properties.id || 'Unknown';
+          
+          nodes.add({
+            id: node.id,
+            label: `${nodeLabel}\n${nodeName}`,
+            color: getNodeColor(node.labels)
+          });
+        });
+      }
+      
+      // Process relationship creations
+      if (tx.changes.relationships && tx.changes.relationships.created) {
+        tx.changes.relationships.created.forEach(rel => {
+          edges.add({
+            id: rel.id,
+            from: rel.startNodeId,
+            to: rel.endNodeId,
+            label: rel.type
+          });
+        });
+      }
+      
+      // Process node modifications (we'll just update the node)
+      if (tx.changes.nodes && tx.changes.nodes.modified) {
+        tx.changes.nodes.modified.forEach(node => {
+          const nodeLabel = node.labels.join(':');
+          const nodeName = node.properties.name || node.properties.id || 'Unknown';
+          
+          nodes.update({
+            id: node.id,
+            label: `${nodeLabel}\n${nodeName}`,
+            color: { 
+              border: '#FFA500',
+              background: getNodeColor(node.labels).background
+            }
+          });
+        });
+      }
+      
+      // Process node deletions
+      if (tx.changes.nodes && tx.changes.nodes.deleted) {
+        tx.changes.nodes.deleted.forEach(nodeId => {
+          nodes.remove(nodeId);
+        });
+      }
+      
+      // Process relationship deletions
+      if (tx.changes.relationships && tx.changes.relationships.deleted) {
+        tx.changes.relationships.deleted.forEach(relId => {
+          edges.remove(relId);
+        });
+      }
+      
+      // Update current index and UI
+      currentIndex++;
+      document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      updateTransactionDetails();
+    }
+    
+    // Reset the visualization
+    function resetVisualization() {
+      currentIndex = 0;
+      nodes.clear();
+      edges.clear();
+      document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      updateTransactionDetails();
+      updateStatus("Visualization reset.");
+    }
+    
+    // Get color for node based on label
+    function getNodeColor(labels) {
+      const colorMap = {
+        'Product': { background: '#FF9999', border: '#CC0000' },
+        'Customer': { background: '#FFCC66', border: '#CC9900' },
+        'Order': { background: '#99CC99', border: '#009900' },
+        'Category': { background: '#9999FF', border: '#0000CC' }
+      };
+      
+      for (const label of labels) {
+        if (colorMap[label]) {
+          return colorMap[label];
+        }
+      }
+      
+      return { background: '#D2E5FF', border: '#2B7CE9' };
+    }
+    
+    // Update transaction details display
+    function updateTransactionDetails() {
+      const detailsElement = document.getElementById('tx-details');
+      
+      if (currentIndex === 0 || transactions.length === 0) {
+        detailsElement.textContent = "No transaction applied yet.";
+        return;
+      }
+      
+      const tx = transactions[currentIndex - 1];
+      const details = JSON.stringify(tx, null, 2);
+      detailsElement.textContent = details;
+    }
+    
+    // Update status message
+    function updateStatus(message) {
+      const statusElement = document.getElementById('status');
+      statusElement.textContent = message;
+      console.log(message);
+    }
+    
+    // Initialize when page loads
+    window.onload = function() {
+      initializeVisualization();
+    };
+  </script>
+</body>
+</html>
