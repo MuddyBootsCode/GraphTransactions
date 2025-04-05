@@ -37,7 +37,22 @@
     .button-container {
       display: flex;
       gap: 10px;
-      margin-bottom: 20px;
+      margin: 20px 0;
+      justify-content: center;
+    }
+    
+    .navigation-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    
+    .control-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
     }
     
     button {
@@ -100,19 +115,23 @@
   </div>
   
   <div class="container">
-    <div class="button-container">
-      <button id="load-data-btn" onclick="loadExampleData()">Load Example Data</button>
-      <input type="file" id="file-upload" accept=".json" style="display: none;" onchange="handleFileUpload(event)">
-      <button id="upload-btn" onclick="document.getElementById('file-upload').click()">Upload JSON</button>
-      <button id="next-btn" onclick="nextTransaction()" disabled>Next Transaction</button>
-      <button id="reset-btn" onclick="resetVisualization()" disabled>Reset</button>
-    </div>
-    
     <div class="transaction-info">
       Transaction: <span id="tx-counter">0 / 0</span>
     </div>
     
     <div id="graph-container" class="graph-container"></div>
+
+    <div class="navigation-buttons">
+      <button id="prev-btn" onclick="previousTransaction()" disabled>Previous Transaction</button>
+      <button id="next-btn" onclick="nextTransaction()" disabled>Next Transaction</button>
+    </div>
+    
+    <div class="control-buttons">
+      <button id="load-data-btn" onclick="loadExampleData()">Load Example Data</button>
+      <input type="file" id="file-upload" accept=".json" style="display: none;" onchange="handleFileUpload(event)">
+      <button id="upload-btn" onclick="document.getElementById('file-upload').click()">Upload JSON</button>
+      <button id="reset-btn" onclick="resetVisualization()" disabled>Reset</button>
+    </div>
     
     <div class="details-container">
       <h3>Transaction Details</h3>
@@ -278,8 +297,7 @@
       
       // Update UI
       document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
-      document.getElementById('next-btn').disabled = false;
-      document.getElementById('reset-btn').disabled = false;
+      updateButtonStates();
       
       updateTransactionDetails();
       updateStatus(`Loaded ${transactions.length} transactions. Click "Next Transaction" to start visualization.`);
@@ -315,8 +333,7 @@
           
           // Update UI
           document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
-          document.getElementById('next-btn').disabled = false;
-          document.getElementById('reset-btn').disabled = false;
+          updateButtonStates();
           
           updateTransactionDetails();
           updateStatus(`Loaded ${transactions.length} transactions from file. Click "Next Transaction" to start visualization.`);
@@ -398,6 +415,7 @@
       // Update current index and UI
       currentIndex++;
       document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      updateButtonStates();
       updateTransactionDetails();
     }
     
@@ -407,6 +425,7 @@
       nodes.clear();
       edges.clear();
       document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      updateButtonStates();
       updateTransactionDetails();
       updateStatus("Visualization reset.");
     }
@@ -448,6 +467,115 @@
       const statusElement = document.getElementById('status');
       statusElement.textContent = message;
       console.log(message);
+    }
+    
+    // Process the previous transaction
+    function previousTransaction() {
+      if (currentIndex <= 1) {
+        updateStatus("At the beginning of transaction sequence.");
+        return;
+      }
+
+      const tx = transactions[currentIndex - 1];
+      
+      // Undo node creations (remove them)
+      if (tx.changes.nodes && tx.changes.nodes.created) {
+        tx.changes.nodes.created.forEach(node => {
+          nodes.remove(node.id);
+        });
+      }
+      
+      // Undo node modifications (restore previous state)
+      if (tx.changes.nodes && tx.changes.nodes.modified) {
+        tx.changes.nodes.modified.forEach(node => {
+          // Get the node's state from the previous transaction
+          const prevTx = transactions[currentIndex - 2];
+          const prevNode = prevTx.changes.nodes.created.find(n => n.id === node.id) ||
+                          prevTx.changes.nodes.modified.find(n => n.id === node.id);
+          
+          if (prevNode) {
+            const nodeLabel = prevNode.labels.join(':');
+            const nodeName = prevNode.properties.name || prevNode.properties.id || 'Unknown';
+            
+            nodes.update({
+              id: prevNode.id,
+              label: `${nodeLabel}\n${nodeName}`,
+              color: getNodeColor(prevNode.labels)
+            });
+          }
+        });
+      }
+      
+      // Undo node deletions (restore them)
+      if (tx.changes.nodes && tx.changes.nodes.deleted) {
+        tx.changes.nodes.deleted.forEach(nodeId => {
+          // Find the node's last known state before deletion
+          for (let i = currentIndex - 2; i >= 0; i--) {
+            const prevTx = transactions[i];
+            const prevNode = prevTx.changes.nodes.created.find(n => n.id === nodeId) ||
+                            prevTx.changes.nodes.modified.find(n => n.id === nodeId);
+            
+            if (prevNode) {
+              const nodeLabel = prevNode.labels.join(':');
+              const nodeName = prevNode.properties.name || prevNode.properties.id || 'Unknown';
+              
+              nodes.add({
+                id: prevNode.id,
+                label: `${nodeLabel}\n${nodeName}`,
+                color: getNodeColor(prevNode.labels)
+              });
+              break;
+            }
+          }
+        });
+      }
+      
+      // Undo relationship creations (remove them)
+      if (tx.changes.relationships && tx.changes.relationships.created) {
+        tx.changes.relationships.created.forEach(rel => {
+          edges.remove(rel.id);
+        });
+      }
+      
+      // Undo relationship deletions (restore them)
+      if (tx.changes.relationships && tx.changes.relationships.deleted) {
+        tx.changes.relationships.deleted.forEach(relId => {
+          // Find the relationship's last known state before deletion
+          for (let i = currentIndex - 2; i >= 0; i--) {
+            const prevTx = transactions[i];
+            const prevRel = prevTx.changes.relationships.created.find(r => r.id === relId) ||
+                           prevTx.changes.relationships.modified.find(r => r.id === relId);
+            
+            if (prevRel) {
+              edges.add({
+                id: prevRel.id,
+                from: prevRel.startNodeId,
+                to: prevRel.endNodeId,
+                label: prevRel.type
+              });
+              break;
+            }
+          }
+        });
+      }
+      
+      // Update current index and UI
+      currentIndex--;
+      document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+      updateButtonStates();
+      updateTransactionDetails();
+      updateStatus(`Moved back to transaction ${currentIndex}`);
+    }
+
+    // Update UI button states
+    function updateButtonStates() {
+      const prevBtn = document.getElementById('prev-btn');
+      const nextBtn = document.getElementById('next-btn');
+      const resetBtn = document.getElementById('reset-btn');
+      
+      prevBtn.disabled = currentIndex <= 1;
+      nextBtn.disabled = currentIndex >= transactions.length;
+      resetBtn.disabled = transactions.length === 0;
     }
     
     // Initialize when page loads
