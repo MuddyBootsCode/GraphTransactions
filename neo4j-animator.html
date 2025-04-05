@@ -34,6 +34,32 @@
       padding: 0 20px;
     }
     
+    .graph-wrapper {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    
+    .graph-container {
+      height: 400px;
+      border: 1px solid #ddd;
+      background-color: white;
+      position: relative;
+      overflow: visible;
+      flex: 1;
+    }
+    
+    .graph-controls {
+      position: static;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: auto;
+      margin-left: 10px;
+      align-self: center;
+    }
+    
     .button-container {
       display: flex;
       gap: 10px;
@@ -69,11 +95,56 @@
       background-color: #1b5fbd;
     }
     
-    .graph-container {
-      height: 400px;
-      border: 1px solid #ddd;
+    .graph-control-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
       background-color: white;
-      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      color: #2B7CE9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: all 0.2s ease;
+      padding: 0;
+    }
+    
+    .graph-control-btn:hover {
+      background-color: #f5f5f5;
+      transform: scale(1.05);
+    }
+    
+    .tooltip {
+      position: relative;
+      display: block;
+    }
+    
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 100px;
+      background-color: #333;
+      color: white;
+      text-align: center;
+      border-radius: 4px;
+      padding: 5px;
+      position: absolute;
+      z-index: 1001;
+      right: 45px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 12px;
+      pointer-events: none;
+    }
+    
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
     }
     
     .details-container {
@@ -119,7 +190,24 @@
       Transaction: <span id="tx-counter">0 / 0</span>
     </div>
     
-    <div id="graph-container" class="graph-container"></div>
+    <div class="graph-wrapper">
+      <div id="graph-container" class="graph-container"></div>
+      
+      <div class="graph-controls" id="graph-controls">
+        <div class="tooltip">
+          <button class="graph-control-btn" id="zoom-in-btn" onclick="zoomIn()">+</button>
+          <span class="tooltiptext">Zoom In</span>
+        </div>
+        <div class="tooltip">
+          <button class="graph-control-btn" id="zoom-out-btn" onclick="zoomOut()">−</button>
+          <span class="tooltiptext">Zoom Out</span>
+        </div>
+        <div class="tooltip">
+          <button class="graph-control-btn" id="recenter-btn" onclick="recenterView()">⊙</button>
+          <span class="tooltiptext">Recenter View</span>
+        </div>
+      </div>
+    </div>
 
     <div class="navigation-buttons">
       <button id="prev-btn" onclick="previousTransaction()" disabled>Previous Transaction</button>
@@ -148,6 +236,55 @@
     let edges = new vis.DataSet();
     let network = null;
     
+    // Keep track of edges between node pairs
+    const edgeCount = new Map();
+    
+    function getEdgeSettings(fromNode, toNode, type) {
+      const nodeKey = `${fromNode}-${toNode}`;
+      const count = edgeCount.get(nodeKey) || 0;
+      edgeCount.set(nodeKey, count + 1);
+      
+      // Only curve if this is not the first edge between these nodes
+      if (count === 0) {
+        return {
+          smooth: {
+            enabled: false,
+            type: 'continuous'
+          },
+          length: 250,
+          font: {
+            size: 12,
+            align: 'middle',
+            background: 'white',
+            strokeWidth: 2,
+            strokeColor: 'white'
+          }
+        };
+      }
+      
+      // Adjust roundness and rotation based on number of edges
+      const baseRoundness = 0.2;
+      const roundnessStep = 0.15;
+      const finalRoundness = baseRoundness + (count * roundnessStep);
+      
+      return {
+        smooth: {
+          enabled: true,
+          type: count % 2 === 0 ? 'curvedCW' : 'curvedCCW',
+          roundness: finalRoundness,
+          forceDirection: 'none'
+        },
+        length: 250,
+        font: {
+          size: 12,
+          align: 'middle',
+          background: 'white',
+          strokeWidth: 2,
+          strokeColor: 'white'
+        }
+      };
+    }
+    
     // Initialize the visualization
     function initializeVisualization() {
       const container = document.getElementById('graph-container');
@@ -158,19 +295,263 @@
           size: 16,
           font: { size: 14 },
           borderWidth: 2,
-          shadow: true
+          shadow: true,
+          fixed: false,
+          margin: 15
         },
         edges: {
           width: 2,
           shadow: true,
-          arrows: { to: { enabled: true, scaleFactor: 0.5 } }
+          smooth: {
+            enabled: false,
+            type: 'continuous'
+          },
+          arrows: { 
+            to: { 
+              enabled: true, 
+              scaleFactor: 0.5 
+            } 
+          },
+          font: {
+            size: 12,
+            align: 'middle',
+            background: 'white',
+            strokeWidth: 2,
+            strokeColor: 'white'
+          },
+          length: 250
         },
         physics: {
-          stabilization: true
+          enabled: true,
+          stabilization: {
+            enabled: true,
+            iterations: 1000,
+            updateInterval: 50,
+            onlyDynamicEdges: false,
+            fit: true,
+            proper: true
+          },
+          barnesHut: {
+            gravitationalConstant: -1000,
+            centralGravity: 0.3,
+            springLength: 200,
+            springConstant: 0.04,
+            damping: 0.09,
+            avoidOverlap: 1
+          },
+          minVelocity: 0.5,
+          maxVelocity: 15,
+          solver: 'barnesHut',
+          timestep: 0.3
+        },
+        layout: {
+          randomSeed: 42,
+          improvedLayout: true,
+          clusterThreshold: 150,
+          hierarchical: {
+            enabled: false
+          }
+        },
+        interaction: {
+          dragNodes: true,
+          dragView: true,
+          zoomView: true,
+          selectable: true,
+          selectConnectedEdges: true,
+          navigationButtons: false,
+          keyboard: true,
+          hover: true,
+          multiselect: true,
+          tooltipDelay: 200
+        },
+        manipulation: {
+          enabled: false
+        },
+        configure: {
+          enabled: false
+        },
+        bounds: {
+          used: true,
+          box: {
+            left: -container.offsetWidth/2 + 50,
+            top: -container.offsetHeight/2 + 50,
+            right: container.offsetWidth/2 - 50,
+            bottom: container.offsetHeight/2 - 50
+          }
         }
       };
       
       network = new vis.Network(container, data, options);
+
+      // Make sure controls are properly positioned
+      const graphControls = document.getElementById('graph-controls');
+      
+      // Reposition controls when window resizes
+      window.addEventListener('resize', function() {
+        if (network && container) {
+          network.setOptions({
+            bounds: {
+              box: {
+                left: -container.offsetWidth/2 + 50,
+                top: -container.offsetHeight/2 + 50,
+                right: container.offsetWidth/2 - 50,
+                bottom: container.offsetHeight/2 - 50
+              }
+            }
+          });
+          network.fit();
+        }
+      });
+      
+      // No need for absolute positioning anymore
+
+      // Calculate initial positions for new nodes
+      const containerWidth = container.offsetWidth;
+      const containerHeight = container.offsetHeight;
+      const centerX = containerWidth / 2;
+      const centerY = containerHeight / 2;
+      let lastNodePosition = { x: centerX, y: centerY };
+      let nodeCount = 0;
+      
+      function calculateNextPosition() {
+        // Limit the radius to ensure nodes stay in view
+        const maxRadius = Math.min(containerWidth, containerHeight) / 3;
+        const radius = Math.min(150, maxRadius);
+        const angle = (nodeCount * (2 * Math.PI / 8)) + (Math.PI / 4);
+        nodeCount = (nodeCount + 1) % 8;
+        
+        return {
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle)
+        };
+      }
+
+      // Add event listeners for stabilization
+      network.on("stabilizationStart", function () {
+        updateStatus("Stabilizing graph layout...");
+        network.stopSimulation();
+        setTimeout(() => {
+          network.startSimulation();
+        }, 50);
+      });
+
+      network.on("stabilizationIterationsDone", function () {
+        network.setOptions({ physics: { stabilization: { enabled: false } } });
+        network.fit({
+          animation: {
+            duration: 1000,
+            easingFunction: "easeOutQuart"
+          }
+        });
+      });
+
+      network.on("stabilized", function() {
+        updateStatus("Graph layout stabilized");
+      });
+
+      // Only fit view after adding nodes, not during drag operations
+      let fitTimeout = null;
+      nodes.on('add', function(event, properties, senderId) {
+        if (fitTimeout) clearTimeout(fitTimeout);
+        
+        // Update positions for newly added nodes
+        const newNodes = properties.items;
+        newNodes.forEach(nodeId => {
+          const position = calculateNextPosition();
+          network.moveNode(nodeId, position.x, position.y);
+          lastNodePosition = position;
+        });
+
+        // Temporarily disable physics during node addition
+        network.setOptions({ physics: { enabled: false } });
+        
+        fitTimeout = setTimeout(() => {
+          // Re-enable physics with gentle settings
+          network.setOptions({ 
+            physics: { 
+              enabled: true,
+              barnesHut: {
+                gravitationalConstant: -500,
+                centralGravity: 0.1,
+                springLength: 200,
+                springConstant: 0.02,
+                damping: 0.09
+              }
+            }
+          });
+          
+          network.fit({
+            animation: {
+              duration: 1000,
+              easingFunction: "easeOutQuart"
+            }
+          });
+        }, 300);
+      });
+
+      // Add drag event handlers
+      network.on("dragStart", function() {
+        if (fitTimeout) clearTimeout(fitTimeout);
+        network.setOptions({ physics: { enabled: false } });
+      });
+
+      network.on("dragEnd", function(params) {
+        if (params.nodes.length > 0) {
+          const nodeId = params.nodes[0];
+          const position = network.getPositions([nodeId])[nodeId];
+          lastNodePosition = position;
+        }
+        
+        // Gently re-enable physics
+        setTimeout(() => {
+          network.setOptions({ 
+            physics: { 
+              enabled: true,
+              barnesHut: {
+                gravitationalConstant: -500,
+                centralGravity: 0.1,
+                springLength: 200,
+                springConstant: 0.02,
+                damping: 0.09
+              }
+            }
+          });
+        }, 200);
+      });
+
+      // Ensure nodes stay in view during stabilization
+      network.on("afterDrawing", function() {
+        const nodePositions = network.getPositions();
+        const viewPosition = network.getViewPosition();
+        const scale = network.getScale();
+        
+        let needsRepositioning = false;
+        const boundingBox = {
+          left: viewPosition.x - (containerWidth/2)/scale + 50/scale,
+          right: viewPosition.x + (containerWidth/2)/scale - 50/scale,
+          top: viewPosition.y - (containerHeight/2)/scale + 50/scale,
+          bottom: viewPosition.y + (containerHeight/2)/scale - 50/scale
+        };
+        
+        for (const nodeId in nodePositions) {
+          const pos = nodePositions[nodeId];
+          if (pos.x < boundingBox.left || pos.x > boundingBox.right || 
+              pos.y < boundingBox.top || pos.y > boundingBox.bottom) {
+            needsRepositioning = true;
+            break;
+          }
+        }
+        
+        if (needsRepositioning) {
+          network.fit({
+            animation: {
+              duration: 500,
+              easingFunction: "easeOutQuad"
+            }
+          });
+        }
+      });
+
       updateStatus("Visualization initialized. Ready to load data.");
     }
     
@@ -300,7 +681,11 @@
       updateButtonStates();
       
       updateTransactionDetails();
-      updateStatus(`Loaded ${transactions.length} transactions. Click "Next Transaction" to start visualization.`);
+      
+      // Automatically apply the first transaction
+      if (transactions.length > 0) {
+        nextTransaction();
+      }
     }
     
     // Handle file upload
@@ -336,7 +721,11 @@
           updateButtonStates();
           
           updateTransactionDetails();
-          updateStatus(`Loaded ${transactions.length} transactions from file. Click "Next Transaction" to start visualization.`);
+          
+          // Automatically apply the first transaction
+          if (transactions.length > 0) {
+            nextTransaction();
+          }
         } catch (error) {
           updateStatus(`Error loading file: ${error.message}`);
           console.error("File upload error:", error);
@@ -355,60 +744,37 @@
       const tx = transactions[currentIndex];
       updateStatus(`Applying transaction ${currentIndex + 1}: ${tx.id}`);
       
-      // Process node creations
+      network.physics.options.barnesHut.springConstant = 0.01;
+      network.physics.options.barnesHut.damping = 0.12;
+      
+      // Process node creations with spacing
       if (tx.changes.nodes && tx.changes.nodes.created) {
-        tx.changes.nodes.created.forEach(node => {
+        tx.changes.nodes.created.forEach((node, index) => {
           const nodeLabel = node.labels.join(':');
           const nodeName = node.properties.name || node.properties.id || 'Unknown';
           
           nodes.add({
             id: node.id,
             label: `${nodeLabel}\n${nodeName}`,
-            color: getNodeColor(node.labels)
+            color: getNodeColor(node.labels),
+            margin: 15,
+            font: { size: 14, multi: true }
           });
         });
       }
       
-      // Process relationship creations
+      // Process relationship creations with improved edge routing
       if (tx.changes.relationships && tx.changes.relationships.created) {
         tx.changes.relationships.created.forEach(rel => {
+          const edgeSettings = getEdgeSettings(rel.startNodeId, rel.endNodeId, rel.type);
+          
           edges.add({
             id: rel.id,
             from: rel.startNodeId,
             to: rel.endNodeId,
-            label: rel.type
+            label: rel.type,
+            ...edgeSettings
           });
-        });
-      }
-      
-      // Process node modifications (we'll just update the node)
-      if (tx.changes.nodes && tx.changes.nodes.modified) {
-        tx.changes.nodes.modified.forEach(node => {
-          const nodeLabel = node.labels.join(':');
-          const nodeName = node.properties.name || node.properties.id || 'Unknown';
-          
-          nodes.update({
-            id: node.id,
-            label: `${nodeLabel}\n${nodeName}`,
-            color: { 
-              border: '#FFA500',
-              background: getNodeColor(node.labels).background
-            }
-          });
-        });
-      }
-      
-      // Process node deletions
-      if (tx.changes.nodes && tx.changes.nodes.deleted) {
-        tx.changes.nodes.deleted.forEach(nodeId => {
-          nodes.remove(nodeId);
-        });
-      }
-      
-      // Process relationship deletions
-      if (tx.changes.relationships && tx.changes.relationships.deleted) {
-        tx.changes.relationships.deleted.forEach(relId => {
-          edges.remove(relId);
         });
       }
       
@@ -417,6 +783,20 @@
       document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
       updateButtonStates();
       updateTransactionDetails();
+
+      setTimeout(() => {
+        network.physics.options.barnesHut.springConstant = 0.01;
+        network.physics.options.barnesHut.damping = 0.09;
+      }, 1500);
+
+      setTimeout(() => {
+        network.fit({
+          animation: {
+            duration: 1500,
+            easingFunction: "easeInOutCubic"
+          }
+        });
+      }, 750);
     }
     
     // Reset the visualization
@@ -477,6 +857,19 @@
       }
 
       const tx = transactions[currentIndex - 1];
+      
+      // Update edge count when removing edges
+      if (tx.changes.relationships && tx.changes.relationships.created) {
+        tx.changes.relationships.created.forEach(rel => {
+          const nodeKey = `${rel.startNodeId}-${rel.endNodeId}`;
+          const count = edgeCount.get(nodeKey);
+          if (count > 1) {
+            edgeCount.set(nodeKey, count - 1);
+          } else {
+            edgeCount.delete(nodeKey);
+          }
+        });
+      }
       
       // Undo node creations (remove them)
       if (tx.changes.nodes && tx.changes.nodes.created) {
@@ -565,6 +958,16 @@
       updateButtonStates();
       updateTransactionDetails();
       updateStatus(`Moved back to transaction ${currentIndex}`);
+
+      // Ensure the view is updated
+      setTimeout(() => {
+        network.fit({
+          animation: {
+            duration: 1000,
+            easingFunction: "easeInOutQuad"
+          }
+        });
+      }, 500);
     }
 
     // Update UI button states
@@ -576,6 +979,58 @@
       prevBtn.disabled = currentIndex <= 1;
       nextBtn.disabled = currentIndex >= transactions.length;
       resetBtn.disabled = transactions.length === 0;
+    }
+    
+    // Zoom and center control functions
+    function zoomIn() {
+      if (!network) return;
+      
+      const currentScale = network.getScale();
+      network.moveTo({
+        scale: currentScale * 1.2,
+        animation: {
+          duration: 300,
+          easingFunction: 'easeOutQuad'
+        }
+      });
+    }
+    
+    function zoomOut() {
+      if (!network) return;
+      
+      const currentScale = network.getScale();
+      network.moveTo({
+        scale: currentScale / 1.2,
+        animation: {
+          duration: 300,
+          easingFunction: 'easeOutQuad'
+        }
+      });
+    }
+    
+    function recenterView() {
+      if (!network) return;
+      
+      const selectedNodes = network.getSelectedNodes();
+      
+      if (selectedNodes.length > 0) {
+        // Center on the first selected node
+        network.focus(selectedNodes[0], {
+          scale: 1.2,
+          animation: {
+            duration: 500,
+            easingFunction: 'easeOutQuad'
+          }
+        });
+      } else {
+        // No selected node, fit the entire graph
+        network.fit({
+          animation: {
+            duration: 500,
+            easingFunction: 'easeOutQuad'
+          }
+        });
+      }
     }
     
     // Initialize when page loads
