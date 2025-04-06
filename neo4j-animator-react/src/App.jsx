@@ -3,6 +3,8 @@ import Graph from './components/Graph';
 import RangeSlider from './components/RangeSlider';
 import { TimeScale } from './utils/timeScale';
 import { getEdgeSettings, getNodeColor, exampleTransactions } from './utils/graphUtils';
+// Import the journey data
+import journeyData from '../journey.json';
 
 function App() {
   // State
@@ -34,6 +36,29 @@ function App() {
       
       // Update status
       updateStatus(`Loaded ${transactions.length} transactions`);
+      
+      // Automatically apply first transaction
+      setTimeout(() => {
+        if (transactions.length > 0) {
+          // Apply the first transaction
+          applyTransaction(transactions[0]);
+          
+          // Update current index
+          setCurrentIndex(1);
+          
+          // Update transaction counter
+          setTxCounter(`1 / ${transactions.length}`);
+          
+          // Update transaction details
+          setTxDetails(JSON.stringify(transactions[0], null, 2));
+          
+          // Update time scale current time
+          newTimeScale.updateCurrentTime(transactions[0].timestamp);
+          
+          // Update button states
+          updateButtonStates();
+        }
+      }, 500); // Small delay to ensure UI is ready
     }
   }, [transactions]);
 
@@ -45,6 +70,23 @@ function App() {
   // Load example data
   const loadExampleData = () => {
     setTransactions(exampleTransactions);
+  };
+
+  // Load journey data
+  const loadJourneyData = () => {
+    try {
+      // Convert journey format to application format
+      const convertedData = convertJourneyFormat(journeyData);
+      
+      // Set transactions
+      setTransactions(convertedData);
+      
+      // Update status
+      updateStatus(`Successfully loaded ${convertedData.length} transactions from journey.json`);
+    } catch (error) {
+      console.error("Error loading journey data:", error);
+      updateStatus("Error loading journey data");
+    }
   };
 
   // Reset visualization
@@ -89,6 +131,66 @@ function App() {
     if (timeScale) {
       timeScale.updateCurrentTime(tx.timestamp);
     }
+  };
+
+  // Convert journey.json format to application format
+  const convertJourneyFormat = (journeyData) => {
+    return journeyData.map(tx => {
+      // Create operations array based on changes in the journey data
+      const operations = [];
+      
+      // Process node creations
+      if (tx.changes && tx.changes.nodes && tx.changes.nodes.created) {
+        tx.changes.nodes.created.forEach(node => {
+          operations.push({
+            type: 'create_node',
+            data: {
+              id: node.id,
+              labels: node.labels,
+              properties: node.properties
+            }
+          });
+        });
+      }
+      
+      // Process node modifications
+      if (tx.changes && tx.changes.nodes && tx.changes.nodes.modified) {
+        tx.changes.nodes.modified.forEach(node => {
+          operations.push({
+            type: 'update_node',
+            data: {
+              id: node.id,
+              labels: node.labels,
+              properties: node.properties
+            }
+          });
+        });
+      }
+      
+      // Process relationship creations
+      if (tx.changes && tx.changes.relationships && tx.changes.relationships.created) {
+        tx.changes.relationships.created.forEach(rel => {
+          operations.push({
+            type: 'create_relationship',
+            data: {
+              id: rel.id,
+              startNodeId: rel.startNodeId,
+              endNodeId: rel.endNodeId,
+              type: rel.type,
+              properties: rel.properties
+            }
+          });
+        });
+      }
+      
+      return {
+        timestamp: tx.timestamp,
+        txId: tx.id,
+        query: tx.query,
+        summary: tx.summary,
+        operations: operations
+      };
+    });
   };
 
   // Update status message
@@ -181,7 +283,7 @@ function App() {
           break;
           
         case 'update_node':
-          // Not implemented yet
+          updateNode(op.data);
           break;
           
         default:
@@ -208,6 +310,33 @@ function App() {
     
     // Add to nodes
     setNodes(prevNodes => [...prevNodes, newNode]);
+  };
+
+  // Update a node
+  const updateNode = (data) => {
+    if (!data || !data.id) return;
+    
+    // Find the node index
+    const nodeIndex = nodes.findIndex(node => node.id === data.id);
+    
+    // Skip if node doesn't exist
+    if (nodeIndex === -1) return;
+    
+    // Create updated node
+    const updatedNode = {
+      ...nodes[nodeIndex],
+      label: data.properties?.name || data.properties?.title || data.id,
+      color: getNodeColor(data.labels),
+      title: formatNodeTooltip(data),
+      data: data // Update original data for reference
+    };
+    
+    // Update nodes array
+    setNodes(prevNodes => {
+      const newNodes = [...prevNodes];
+      newNodes[nodeIndex] = updatedNode;
+      return newNodes;
+    });
   };
 
   // Create a relationship
@@ -323,16 +452,24 @@ function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result);
-        if (Array.isArray(data)) {
-          setTransactions(data);
-          updateStatus(`Loaded ${data.length} transactions from file`);
-        } else {
-          updateStatus("Invalid JSON format: Expected an array");
-        }
+        const jsonData = JSON.parse(e.target.result);
+        
+        // Convert journey format to application format
+        const convertedData = convertJourneyFormat(jsonData);
+        
+        // Set transactions
+        setTransactions(convertedData);
+        
+        // Update status
+        updateStatus(`Successfully loaded ${convertedData.length} transactions from file`);
       } catch (error) {
-        updateStatus(`Error parsing JSON: ${error.message}`);
+        console.error("Error parsing JSON:", error);
+        updateStatus("Error loading file: Invalid JSON format");
       }
+    };
+    
+    reader.onerror = () => {
+      updateStatus("Error reading file");
     };
     
     reader.readAsText(file);
@@ -379,8 +516,47 @@ function App() {
 
   return (
     <div className="container">
-      <div className="header">
-        <h1>Neo4j Transaction Animator</h1>
+      <div className="sidebar">
+        <div className="controls">
+          <h2>Neo4j Transaction Animator</h2>
+          
+          <div className="control-group">
+            <h3>Data</h3>
+            <div className="control-buttons">
+              <button 
+                id="load-example-btn" 
+                onClick={loadExampleData}
+                className="primary-button"
+              >
+                Load Example Data
+              </button>
+              <button 
+                id="load-journey-btn" 
+                onClick={loadJourneyData}
+                className="primary-button"
+              >
+                Load Journey Data
+              </button>
+              <input 
+                type="file" 
+                id="file-input" 
+                accept=".json" 
+                onChange={handleFileUpload}
+              />
+              <label htmlFor="file-input" className="file-input-label">
+                Upload JSON
+              </label>
+              <button 
+                id="reset-btn" 
+                onClick={() => resetVisualization()} 
+                disabled={transactions.length === 0}
+                className="secondary-button"
+              >
+                Reset Graph
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div className="transaction-info">
@@ -426,30 +602,6 @@ function App() {
           disabled={currentIndex >= transactions.length}
         >
           Next Transaction
-        </button>
-      </div>
-      
-      <div className="control-buttons">
-        <button id="load-data-btn" onClick={loadExampleData}>Load Example Data</button>
-        <input 
-          type="file" 
-          id="file-upload" 
-          accept=".json" 
-          style={{ display: 'none' }} 
-          onChange={handleFileUpload} 
-        />
-        <button 
-          id="upload-btn" 
-          onClick={() => document.getElementById('file-upload').click()}
-        >
-          Upload JSON
-        </button>
-        <button 
-          id="reset-btn" 
-          onClick={() => resetVisualization()} 
-          disabled={transactions.length === 0}
-        >
-          Reset
         </button>
       </div>
       

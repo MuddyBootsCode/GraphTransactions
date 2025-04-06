@@ -1,0 +1,355 @@
+[
+  {
+    "id": "tx1",
+    "timestamp": "2025-04-05T09:15:00Z",
+    "query": "CREATE (p:Product {id: 'p1', name: 'Smartphone X1', price: 899.99})",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "nodesCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 12
+    },
+    "changes": {
+      "nodes": {
+        "created": [
+          {
+            "id": "node1",
+            "labels": ["Product"],
+            "properties": {
+              "id": "p1",
+              "name": "Smartphone X1",
+              "price": 899.99
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx2",
+    "timestamp": "2025-04-05T09:16:30Z",
+    "query": "CREATE (c:Customer {id: 'c1', name: 'Alice Smith', email: 'alice@example.com'})",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "nodesCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 8
+    },
+    "changes": {
+      "nodes": {
+        "created": [
+          {
+            "id": "node2",
+            "labels": ["Customer"],
+            "properties": {
+              "id": "c1",
+              "name": "Alice Smith",
+              "email": "alice@example.com"
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx3",
+    "timestamp": "2025-04-05T09:17:45Z",
+    "query": "CREATE (c:Customer {id: 'c2', name: 'Bob Johnson', email: 'bob@example.com'})",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "nodesCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 7
+    },
+    "changes": {
+      "nodes": {
+        "created": [
+          {
+            "id": "node3",
+            "labels": ["Customer"],
+            "properties": {
+              "id": "c2",
+              "name": "Bob Johnson",
+              "email": "bob@example.com"
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx4",
+    "timestamp": "2025-04-05T09:19:00Z",
+    "query": "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p1'}) CREATE (c)-[r:VIEWED {timestamp: datetime()}]->(p)",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "relationshipsCreated": 1,
+        "propertiesSet": 1
+      },
+      "executionTime": 15
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [
+          {
+            "id": "rel1",
+            "type": "VIEWED",
+            "startNodeId": "node2",
+            "endNodeId": "node1",
+            "properties": {
+              "timestamp": "2025-04-05T09:19:00Z"
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx5",
+    "timestamp": "2025-04-05T09:20:15Z",
+    "query": "MATCH (c:Customer {id: 'c2'}), (p:Product {id: 'p1'}) CREATE (c)-[r:VIEWED {timestamp: datetime()}]->(p)",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "relationshipsCreated": 1,
+        "propertiesSet": 1
+      },
+      "executionTime": 10
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [
+          {
+            "id": "rel2",
+            "type": "VIEWED",
+            "startNodeId": "node3",
+            "endNodeId": "node1",
+            "properties": {
+              "timestamp": "2025-04-05T09:20:15Z"
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx6",
+    "timestamp": "2025-04-05T09:22:30Z",
+    "query": "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p1'}) CREATE (c)-[r:PURCHASED {timestamp: datetime(), quantity: 1, total: 899.99}]->(p)",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "relationshipsCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 18
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [
+          {
+            "id": "rel3",
+            "type": "PURCHASED",
+            "startNodeId": "node2",
+            "endNodeId": "node1",
+            "properties": {
+              "timestamp": "2025-04-05T09:22:30Z",
+              "quantity": 1,
+              "total": 899.99
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx7",
+    "timestamp": "2025-04-05T09:25:00Z",
+    "query": "CREATE (p:Product {id: 'p2', name: 'Wireless Earbuds', price: 129.99})",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "nodesCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 9
+    },
+    "changes": {
+      "nodes": {
+        "created": [
+          {
+            "id": "node4",
+            "labels": ["Product"],
+            "properties": {
+              "id": "p2",
+              "name": "Wireless Earbuds",
+              "price": 129.99
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx8",
+    "timestamp": "2025-04-05T09:27:45Z",
+    "query": "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p2'}) CREATE (c)-[r:VIEWED {timestamp: datetime()}]->(p)",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "relationshipsCreated": 1,
+        "propertiesSet": 1
+      },
+      "executionTime": 11
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [
+          {
+            "id": "rel4",
+            "type": "VIEWED",
+            "startNodeId": "node2",
+            "endNodeId": "node4",
+            "properties": {
+              "timestamp": "2025-04-05T09:27:45Z"
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx9",
+    "timestamp": "2025-04-05T09:30:00Z",
+    "query": "MATCH (c:Customer {id: 'c1'}), (p:Product {id: 'p2'}) CREATE (c)-[r:PURCHASED {timestamp: datetime(), quantity: 1, total: 129.99}]->(p)",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "relationshipsCreated": 1,
+        "propertiesSet": 3
+      },
+      "executionTime": 14
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [
+          {
+            "id": "rel5",
+            "type": "PURCHASED",
+            "startNodeId": "node2",
+            "endNodeId": "node4",
+            "properties": {
+              "timestamp": "2025-04-05T09:30:00Z",
+              "quantity": 1,
+              "total": 129.99
+            }
+          }
+        ],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  },
+  {
+    "id": "tx10",
+    "timestamp": "2025-04-05T09:32:15Z",
+    "query": "MATCH (p:Product {id: 'p1'}) SET p.price = 849.99",
+    "parameters": {},
+    "summary": {
+      "counters": {
+        "propertiesSet": 1
+      },
+      "executionTime": 8
+    },
+    "changes": {
+      "nodes": {
+        "created": [],
+        "modified": [
+          {
+            "id": "node1",
+            "labels": ["Product"],
+            "properties": {
+              "id": "p1",
+              "name": "Smartphone X1",
+              "price": 849.99
+            }
+          }
+        ],
+        "deleted": []
+      },
+      "relationships": {
+        "created": [],
+        "modified": [],
+        "deleted": []
+      }
+    }
+  }
+]

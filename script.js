@@ -9,6 +9,27 @@ let timeScale = null;  // For timestamp scaling
 // Keep track of edges between node pairs
 const edgeCount = new Map();
 
+// Initialize everything when the DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize the visualization
+  initializeVisualization();
+  
+  // Initialize time scale with empty data initially
+  timeScale = new TimeScale([]);
+  timeScale.updateLabels();
+  timeScale.updateCurrentTime(null);
+  
+  // Initialize the range slider
+  initCustomRangeSlider();
+  
+  // Update the UI
+  document.getElementById('tx-counter').textContent = `${currentIndex} / ${transactions.length}`;
+  updateButtonStates();
+  
+  // Update status to indicate the app is ready
+  updateStatus("App initialized. Ready to load transaction data.");
+});
+
 // Time scaling utility for slider
 class TimeScale {
   constructor(transactions) {
@@ -190,8 +211,6 @@ function initTimeScale() {
 
 // Initialize custom range slider
 function initCustomRangeSlider() {
-  if (!transactions || transactions.length === 0) return;
-  
   const container = document.querySelector('.multi-range-slider .slider-container');
   const leftHandle = document.getElementById('left-handle');
   const rightHandle = document.getElementById('right-handle');
@@ -200,6 +219,12 @@ function initCustomRangeSlider() {
   const minValueLabel = document.getElementById('range-min-value');
   const maxValueLabel = document.getElementById('range-max-value');
   const currentTimeDisplay = document.getElementById('current-time-display');
+  
+  // Check if elements exist
+  if (!container || !leftHandle || !rightHandle || !track || !trackFill) {
+    console.error("Required DOM elements for range slider not found");
+    return;
+  }
   
   let isDragging = false;
   let currentHandle = null;
@@ -211,6 +236,14 @@ function initCustomRangeSlider() {
   
   // Initialize labels
   updateLabels();
+  
+  // If there are no transactions, set default labels and return
+  if (!transactions || transactions.length === 0) {
+    minValueLabel.textContent = '00:00';
+    maxValueLabel.textContent = '00:00';
+    currentTimeDisplay.textContent = 'No transaction';
+    return;
+  }
   
   // Update handle positions
   function updateHandlePositions(left, right) {
@@ -813,30 +846,131 @@ function loadExampleData() {
 // Handle file upload
 function handleFileUpload(event) {
   const file = event.target.files[0];
-  if (!file) return;
+  if (!file) {
+    updateStatus("No file selected");
+    return;
+  }
 
+  updateStatus(`Loading file: ${file.name}`);
+  
   const reader = new FileReader();
+  
   reader.onload = function(e) {
     try {
+      updateStatus("Parsing JSON data...");
       const jsonData = JSON.parse(e.target.result);
       
       // Validate the JSON structure
       if (!Array.isArray(jsonData)) {
         throw new Error("Uploaded file must contain an array of transactions");
       }
+      
+      updateStatus(`Found ${jsonData.length} transactions in file`);
 
       // Basic validation of transaction structure
+      let validationErrors = [];
       jsonData.forEach((tx, index) => {
-        if (!tx.id || !tx.timestamp || !tx.query || !tx.changes) {
-          throw new Error(`Invalid transaction structure at index ${index}`);
+        if (!tx.id) validationErrors.push(`Transaction at index ${index} missing id`);
+        if (!tx.timestamp) validationErrors.push(`Transaction at index ${index} missing timestamp`);
+        if (!tx.query) validationErrors.push(`Transaction at index ${index} missing query`);
+        if (!tx.changes) validationErrors.push(`Transaction at index ${index} missing changes`);
+        
+        // Validate changes structure if it exists
+        if (tx.changes) {
+          // Check for nodes section
+          if (!tx.changes.nodes) {
+            validationErrors.push(`Transaction ${tx.id} missing changes.nodes structure`);
+          } else {
+            // Ensure created, modified, deleted arrays exist
+            if (!Array.isArray(tx.changes.nodes.created)) {
+              tx.changes.nodes.created = [];
+            }
+            if (!Array.isArray(tx.changes.nodes.modified)) {
+              tx.changes.nodes.modified = [];
+            }
+            if (!Array.isArray(tx.changes.nodes.deleted)) {
+              tx.changes.nodes.deleted = [];
+            }
+          }
+          
+          // Check for relationships section
+          if (!tx.changes.relationships) {
+            validationErrors.push(`Transaction ${tx.id} missing changes.relationships structure`);
+          } else {
+            // Ensure created, modified, deleted arrays exist
+            if (!Array.isArray(tx.changes.relationships.created)) {
+              tx.changes.relationships.created = [];
+            }
+            if (!Array.isArray(tx.changes.relationships.modified)) {
+              tx.changes.relationships.modified = [];
+            }
+            if (!Array.isArray(tx.changes.relationships.deleted)) {
+              tx.changes.relationships.deleted = [];
+            }
+          }
         }
       });
+      
+      if (validationErrors.length > 0) {
+        updateStatus(`JSON format has ${validationErrors.length} validation errors`);
+        console.error("Validation errors:", validationErrors);
+        
+        // Show the expected format
+        document.getElementById('tx-details').innerHTML = 
+          "Expected JSON format:\n" +
+          JSON.stringify([
+            {
+              "id": "tx1",
+              "timestamp": "2023-01-01T12:00:00Z",
+              "query": "CREATE (n:Node {id: '1', name: 'Example'})",
+              "parameters": {},
+              "changes": {
+                "nodes": {
+                  "created": [
+                    {
+                      "id": "node1",
+                      "labels": ["Label1", "Label2"],
+                      "properties": {
+                        "id": "1",
+                        "name": "Example Node"
+                      }
+                    }
+                  ],
+                  "modified": [],
+                  "deleted": []
+                },
+                "relationships": {
+                  "created": [
+                    {
+                      "id": "rel1",
+                      "type": "RELATES_TO",
+                      "startNodeId": "node1",
+                      "endNodeId": "node2",
+                      "properties": {}
+                    }
+                  ],
+                  "modified": [],
+                  "deleted": []
+                }
+              }
+            }
+          ], null, 2);
+        
+        // Return early if critical errors
+        if (validationErrors.some(e => e.includes("missing id") || e.includes("missing changes"))) {
+          throw new Error("Invalid transaction format - see console for details");
+        }
+      }
 
-      // If validation passes, load the data
+      // If validation passes or has non-critical errors, try to load the data
       transactions = jsonData;
+      
+      updateStatus("Resetting visualization...");
       
       // Reset visualization
       resetVisualization();
+      
+      updateStatus("Initializing timeline...");
       
       // Initialize timeline slider
       initTimeScale();
@@ -847,8 +981,11 @@ function handleFileUpload(event) {
       
       updateTransactionDetails();
       
+      updateStatus(`Ready to visualize ${transactions.length} transactions`);
+      
       // Automatically apply the first transaction
       if (transactions.length > 0) {
+        updateStatus("Applying first transaction...");
         nextTransaction();
       }
     } catch (error) {
@@ -856,11 +993,21 @@ function handleFileUpload(event) {
       console.error("File upload error:", error);
     }
   };
+  
+  reader.onerror = function() {
+    updateStatus("Failed to read the file");
+  };
+  
   reader.readAsText(file);
 }
 
 // Process the next transaction
 function nextTransaction(updateDisplay = true, preserveEdgeRouting = false) {
+  if (!network) {
+    updateStatus("ERROR: Visualization network not initialized. Try refreshing the page.");
+    return;
+  }
+
   if (currentIndex >= transactions.length) {
     updateStatus("End of transaction sequence reached.");
     return;
@@ -868,29 +1015,52 @@ function nextTransaction(updateDisplay = true, preserveEdgeRouting = false) {
   
   const tx = transactions[currentIndex];
   updateStatus(`Applying transaction ${currentIndex + 1}: ${tx.id}`);
+  console.log("Transaction data:", JSON.stringify(tx, null, 2));
   
   // Temporarily disable physics for smoother additions
   network.setOptions({ physics: { enabled: false } });
   
   // Process node creations with spacing
-  if (tx.changes.nodes && tx.changes.nodes.created) {
+  if (tx.changes && tx.changes.nodes && tx.changes.nodes.created) {
+    updateStatus(`Processing ${tx.changes.nodes.created.length} nodes`);
     tx.changes.nodes.created.forEach((node, index) => {
-      const nodeLabel = node.labels.join(':');
-      const nodeName = node.properties.name || node.properties.id || 'Unknown';
+      console.log("Processing node:", node);
+      if (!node.id) {
+        console.error("Node missing ID:", node);
+        return;
+      }
       
-      nodes.add({
-        id: node.id,
-        label: `${nodeLabel}\n${nodeName}`,
-        color: getNodeColor(node.labels),
-        margin: 15,
-        font: { size: 14, multi: true }
-      });
+      const nodeLabel = node.labels ? node.labels.join(':') : 'Unknown';
+      const nodeName = node.properties ? (node.properties.name || node.properties.id || 'Unknown') : 'Unknown';
+      
+      try {
+        nodes.add({
+          id: node.id,
+          label: `${nodeLabel}\n${nodeName}`,
+          color: getNodeColor(node.labels || []),
+          margin: 15,
+          font: { size: 14, multi: true }
+        });
+        console.log(`Added node: ${node.id}`);
+      } catch (error) {
+        console.error(`Error adding node ${node.id}:`, error);
+      }
     });
+  } else {
+    updateStatus("No nodes to create in this transaction");
+    console.log("No nodes.created found in transaction", tx);
   }
   
   // Process relationship creations with improved edge routing
-  if (tx.changes.relationships && tx.changes.relationships.created) {
+  if (tx.changes && tx.changes.relationships && tx.changes.relationships.created) {
+    updateStatus(`Processing ${tx.changes.relationships.created.length} relationships`);
     tx.changes.relationships.created.forEach(rel => {
+      console.log("Processing relationship:", rel);
+      if (!rel.id || !rel.startNodeId || !rel.endNodeId) {
+        console.error("Relationship missing required properties:", rel);
+        return;
+      }
+      
       let edgeSettings;
       
       if (preserveEdgeRouting) {
@@ -915,14 +1085,22 @@ function nextTransaction(updateDisplay = true, preserveEdgeRouting = false) {
         edgeSettings = getEdgeSettings(rel.startNodeId, rel.endNodeId, rel.type);
       }
       
-      edges.add({
-        id: rel.id,
-        from: rel.startNodeId,
-        to: rel.endNodeId,
-        label: rel.type,
-        ...edgeSettings
-      });
+      try {
+        edges.add({
+          id: rel.id,
+          from: rel.startNodeId,
+          to: rel.endNodeId,
+          label: rel.type || "RELATED_TO",
+          ...edgeSettings
+        });
+        console.log(`Added edge: ${rel.id} from ${rel.startNodeId} to ${rel.endNodeId}`);
+      } catch (error) {
+        console.error(`Error adding relationship ${rel.id}:`, error);
+      }
     });
+  } else {
+    updateStatus("No relationships to create in this transaction");
+    console.log("No relationships.created found in transaction", tx);
   }
   
   // Update current index and UI
@@ -936,6 +1114,9 @@ function nextTransaction(updateDisplay = true, preserveEdgeRouting = false) {
     timeScale.updateCurrentTime(tx.timestamp);
   }
 
+  // Check if any nodes were added
+  updateStatus(`Current node count: ${nodes.length}, edge count: ${edges.length}`);
+  
   // Re-enable physics with gentle settings for a brief period
   setTimeout(() => {
     network.setOptions({ 
@@ -957,12 +1138,16 @@ function nextTransaction(updateDisplay = true, preserveEdgeRouting = false) {
     
     // Fit the view
     setTimeout(() => {
-      network.fit({
-        animation: {
-          duration: 1000,
-          easingFunction: "easeInOutQuad"
-        }
-      });
+      if (nodes.length > 0) {
+        network.fit({
+          animation: {
+            duration: 1000,
+            easingFunction: "easeInOutQuad"
+          }
+        });
+      } else {
+        updateStatus("WARNING: No nodes to display after transaction applied");
+      }
       
       // Stop simulation after physics has had time to position elements
       setTimeout(() => {
@@ -1258,8 +1443,165 @@ function recenterView() {
   }
 }
 
-// Initialize when page loads
-window.onload = function() {
-  initializeVisualization();
-  initTimeScale(); // Initialize slider with default values
-}; 
+// Extract and visualize nodes from possibly malformed transaction data
+function extractAndVisualizeNodes() {
+  if (!transactions || transactions.length === 0) {
+    updateStatus("No transaction data available to extract nodes from");
+    return;
+  }
+  
+  updateStatus("Attempting to extract nodes from transaction data...");
+  
+  // Reset visualization first
+  resetVisualization();
+  
+  // Keep track of nodes and relationships we've already processed
+  const processedNodeIds = new Set();
+  const processedRelIds = new Set();
+  
+  // Try to extract all nodes and relationships from all transactions
+  transactions.forEach((tx, txIndex) => {
+    console.log(`Examining transaction ${txIndex + 1}/${transactions.length}`);
+    
+    // Direct node extraction path
+    if (tx.changes && tx.changes.nodes && Array.isArray(tx.changes.nodes.created)) {
+      tx.changes.nodes.created.forEach(node => {
+        if (node.id && !processedNodeIds.has(node.id)) {
+          processedNodeIds.add(node.id);
+          
+          try {
+            const nodeLabel = node.labels ? node.labels.join(':') : 'Node';
+            const nodeName = node.properties ? 
+              (node.properties.name || node.properties.id || `Node-${node.id}`) : 
+              `Node-${node.id}`;
+            
+            nodes.add({
+              id: node.id,
+              label: `${nodeLabel}\n${nodeName}`,
+              color: getNodeColor(node.labels || []),
+              margin: 15,
+              font: { size: 14, multi: true }
+            });
+            console.log(`Extracted node: ${node.id}`);
+          } catch (error) {
+            console.error(`Error adding extracted node ${node.id}:`, error);
+          }
+        }
+      });
+    }
+    
+    // Try alternative paths if the main path didn't work
+    if (tx.nodes) {
+      // Some formats might have nodes directly
+      const nodeList = Array.isArray(tx.nodes) ? tx.nodes : [tx.nodes];
+      nodeList.forEach(node => {
+        if (node.id && !processedNodeIds.has(node.id)) {
+          processedNodeIds.add(node.id);
+          
+          try {
+            const nodeLabel = node.labels ? node.labels.join(':') : 'Node';
+            const nodeName = node.properties ? 
+              (node.properties.name || node.properties.id || `Node-${node.id}`) : 
+              `Node-${node.id}`;
+            
+            nodes.add({
+              id: node.id,
+              label: `${nodeLabel}\n${nodeName}`,
+              color: getNodeColor(node.labels || []),
+              margin: 15,
+              font: { size: 14, multi: true }
+            });
+            console.log(`Extracted alternate node: ${node.id}`);
+          } catch (error) {
+            console.error(`Error adding alternate node ${node.id}:`, error);
+          }
+        }
+      });
+    }
+    
+    // Direct relationship extraction path
+    if (tx.changes && tx.changes.relationships && Array.isArray(tx.changes.relationships.created)) {
+      tx.changes.relationships.created.forEach(rel => {
+        if (rel.id && rel.startNodeId && rel.endNodeId && !processedRelIds.has(rel.id)) {
+          processedRelIds.add(rel.id);
+          
+          try {
+            edges.add({
+              id: rel.id,
+              from: rel.startNodeId,
+              to: rel.endNodeId,
+              label: rel.type || "RELATED_TO",
+              smooth: {
+                enabled: true,
+                type: 'continuous',
+                roundness: 0.2
+              }
+            });
+            console.log(`Extracted relationship: ${rel.id}`);
+          } catch (error) {
+            console.error(`Error adding extracted relationship ${rel.id}:`, error);
+          }
+        }
+      });
+    }
+    
+    // Try alternative paths for relationships
+    if (tx.relationships) {
+      const relList = Array.isArray(tx.relationships) ? tx.relationships : [tx.relationships];
+      relList.forEach(rel => {
+        if (rel.id && rel.startNodeId && rel.endNodeId && !processedRelIds.has(rel.id)) {
+          processedRelIds.add(rel.id);
+          
+          try {
+            edges.add({
+              id: rel.id,
+              from: rel.startNodeId,
+              to: rel.endNodeId,
+              label: rel.type || "RELATED_TO",
+              smooth: {
+                enabled: true,
+                type: 'continuous',
+                roundness: 0.2
+              }
+            });
+            console.log(`Extracted alternate relationship: ${rel.id}`);
+          } catch (error) {
+            console.error(`Error adding alternate relationship ${rel.id}:`, error);
+          }
+        }
+      });
+    }
+  });
+  
+  updateStatus(`Extracted ${processedNodeIds.size} nodes and ${processedRelIds.size} relationships`);
+  
+  // If we found any nodes, update the view
+  if (processedNodeIds.size > 0) {
+    // Fit the view
+    setTimeout(() => {
+      network.fit({
+        animation: {
+          duration: 1000,
+          easingFunction: "easeInOutQuad"
+        }
+      });
+    }, 500);
+  } else {
+    updateStatus("ERROR: Could not extract any nodes from transaction data");
+  }
+}
+
+// Add debug extraction button to HTML
+document.addEventListener('DOMContentLoaded', function() {
+  // Add the debug extraction button after the existing buttons
+  const controlButtons = document.querySelector('.control-buttons');
+  if (controlButtons) {
+    const extractButton = document.createElement('button');
+    extractButton.id = 'extract-btn';
+    extractButton.textContent = 'Debug Extract Nodes';
+    extractButton.style.backgroundColor = '#ffcc00';
+    extractButton.style.color = '#333';
+    extractButton.onclick = extractAndVisualizeNodes;
+    controlButtons.appendChild(extractButton);
+  }
+}); 
