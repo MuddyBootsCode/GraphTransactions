@@ -26,6 +26,9 @@ export class TimeScale {
       index: index,
       time: new Date(tx.timestamp).getTime()
     })).sort((a, b) => a.time - b.time);
+    
+    // Initialize current time to start time
+    this.currentTime = this.startTime;
   }
   
   // Get all transactions within a time range
@@ -120,17 +123,36 @@ export class TimeScale {
     return closestIndex;
   }
   
+  // Update the current time (used by slider and animation)
+  updateCurrentTime(timestamp) {
+    if (timestamp) {
+      this.currentTime = new Date(timestamp).getTime();
+    }
+    return this.currentTime;
+  }
+  
   // Format timestamp for display
   formatTimestamp(timestamp) {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // Format date and time more readably for display
+    return date.toLocaleString([], { 
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
   }
   
   // Format timestamp with date for current time display
   formatCurrentTime(timestamp) {
     if (!timestamp) return "No time";
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { 
+    
+    // Format the current time with more detail
+    return date.toLocaleString([], { 
+      month: 'short',
+      day: 'numeric',
       hour: '2-digit', 
       minute: '2-digit',
       second: '2-digit' 

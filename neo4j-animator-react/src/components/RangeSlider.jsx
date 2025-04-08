@@ -1,153 +1,86 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { Slider, Typography, Box, Paper, Chip } from '@mui/material';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 const RangeSlider = ({ 
   minValue = 0, 
   maxValue = 100, 
-  initialLeftValue = 0, 
-  initialRightValue = 100, 
+  initialLeftValue = null, 
+  initialRightValue = null, 
   formatLabel = (val) => val, 
   formatCurrentTime = (val) => val, 
   currentTime = null,
   onRangeChange 
 }) => {
-  const [leftPos, setLeftPos] = useState(initialLeftValue);
-  const [rightPos, setRightPos] = useState(initialRightValue);
-  const [isDragging, setIsDragging] = useState(false);
-  const [currentHandle, setCurrentHandle] = useState(null);
+  // If initialLeftValue/initialRightValue not provided, use the full range
+  const defaultLeftValue = initialLeftValue !== null ? initialLeftValue : minValue;
+  const defaultRightValue = initialRightValue !== null ? initialRightValue : maxValue;
   
-  const containerRef = useRef(null);
-  const leftHandleRef = useRef(null);
-  const rightHandleRef = useRef(null);
-  const trackFillRef = useRef(null);
+  const [value, setValue] = useState([defaultLeftValue, defaultRightValue]);
   
-  // Initialize slider on mount
+  // Update the slider when min/max values change
   useEffect(() => {
-    updateHandlePositions(initialLeftValue, initialRightValue);
-    
-    // Add global event listeners for drag operations
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
+    setValue([minValue, maxValue]);
+  }, [minValue, maxValue]);
   
-  // Update handle positions
-  const updateHandlePositions = (left, right) => {
-    setLeftPos(left);
-    setRightPos(right);
-    
-    if (leftHandleRef.current && rightHandleRef.current && trackFillRef.current) {
-      leftHandleRef.current.style.left = `${left}%`;
-      rightHandleRef.current.style.left = `${right}%`;
-      
-      // Update track fill position and width
-      trackFillRef.current.style.left = `${left}%`;
-      trackFillRef.current.style.width = `${right - left}%`;
-    }
-  };
-  
-  // Handle mouse move during drag
-  const handleMouseMove = (e) => {
-    if (!isDragging || !containerRef.current) return;
-    
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const containerWidth = containerRect.width;
-    const containerLeft = containerRect.left;
-    
-    // Calculate position as percentage
-    let position = ((e.clientX - containerLeft) / containerWidth) * 100;
-    
-    // Constrain to 0-100%
-    position = Math.max(0, Math.min(100, position));
-    
-    if (currentHandle === 'left') {
-      // Don't allow left handle to go past right handle
-      if (position < rightPos) {
-        updateHandlePositions(position, rightPos);
-      }
-    } else if (currentHandle === 'right') {
-      // Don't allow right handle to go past left handle
-      if (position > leftPos) {
-        updateHandlePositions(leftPos, position);
-      }
-    }
-    
-    // Notify parent component of range change
+  // Notify parent component of range change
+  useEffect(() => {
     if (onRangeChange) {
-      onRangeChange(leftPos, rightPos);
+      onRangeChange(value[0], value[1]);
     }
-  };
+  }, [value, onRangeChange]);
   
-  // Handle mouse up
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setCurrentHandle(null);
-    
-    if (containerRef.current) {
-      containerRef.current.style.cursor = 'default';
-    }
-    
-    // Final notification of range change
-    if (onRangeChange) {
-      onRangeChange(leftPos, rightPos);
-    }
-  };
-  
-  // Start dragging left handle
-  const handleLeftMouseDown = (e) => {
-    setIsDragging(true);
-    setCurrentHandle('left');
-    
-    if (containerRef.current) {
-      containerRef.current.style.cursor = 'grabbing';
-    }
-    
-    e.preventDefault(); // Prevent text selection
-  };
-  
-  // Start dragging right handle
-  const handleRightMouseDown = (e) => {
-    setIsDragging(true);
-    setCurrentHandle('right');
-    
-    if (containerRef.current) {
-      containerRef.current.style.cursor = 'grabbing';
-    }
-    
-    e.preventDefault(); // Prevent text selection
+  const handleChange = (event, newValue) => {
+    setValue(newValue);
   };
   
   return (
-    <div className="multi-range-slider">
-      <div className="current-time-display">
-        {currentTime !== null ? formatCurrentTime(currentTime) : "No transaction"}
-      </div>
+    <Paper elevation={2} sx={{ padding: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', marginBottom: 2 }}>
+        <Chip
+          icon={<AccessTimeIcon />}
+          color="primary"
+          label={currentTime !== null ? formatCurrentTime(currentTime) : "No transaction"}
+          sx={{ fontSize: '1rem', fontWeight: 'medium', padding: 1 }}
+        />
+      </Box>
       
-      <div className="range-slider-title">Select Time Range:</div>
+      <Typography variant="body1" fontWeight="medium" sx={{ marginBottom: 1 }}>
+        Select Time Range:
+      </Typography>
       
-      <div className="slider-container" ref={containerRef}>
-        <div className="slider-track"></div>
-        <div className="slider-track-fill" ref={trackFillRef}></div>
-        <div 
-          className="slider-handle left-handle" 
-          ref={leftHandleRef}
-          onMouseDown={handleLeftMouseDown}
-        ></div>
-        <div 
-          className="slider-handle right-handle" 
-          ref={rightHandleRef}
-          onMouseDown={handleRightMouseDown}
-        ></div>
-      </div>
-      
-      <div className="range-labels">
-        <span>{formatLabel(minValue)}</span>
-        <span>{formatLabel(maxValue)}</span>
-      </div>
-    </div>
+      <Box sx={{ padding: '0 10px' }}>
+        <Slider
+          value={value}
+          onChange={handleChange}
+          valueLabelDisplay="auto"
+          valueLabelFormat={formatLabel}
+          min={minValue}
+          max={maxValue}
+          sx={{ marginBottom: 2 }}
+        />
+        
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          color: 'text.secondary',
+          fontSize: '0.875rem'
+        }}>
+          <Chip 
+            label={formatLabel(minValue)} 
+            size="small" 
+            variant="outlined"
+            sx={{ fontSize: '0.75rem' }}
+          />
+          <Chip 
+            label={formatLabel(maxValue)} 
+            size="small" 
+            variant="outlined"
+            sx={{ fontSize: '0.75rem' }}
+          />
+        </Box>
+      </Box>
+    </Paper>
   );
 };
 

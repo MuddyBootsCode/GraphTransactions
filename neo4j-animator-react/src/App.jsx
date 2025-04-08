@@ -6,6 +6,29 @@ import { getEdgeSettings, getNodeColor, exampleTransactions } from './utils/grap
 // Import the journey data
 import journeyData from '../journey.json';
 
+// Material UI imports
+import { 
+  Button, 
+  Typography, 
+  Container, 
+  Box, 
+  Paper,
+  Grid,
+  Stack,
+  Divider,
+  IconButton,
+  Tooltip 
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DatasetIcon from '@mui/icons-material/Dataset';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+
 function App() {
   // State
   const [transactions, setTransactions] = useState([]);
@@ -37,28 +60,13 @@ function App() {
       // Update status
       updateStatus(`Loaded ${transactions.length} transactions`);
       
-      // Automatically apply first transaction
-      setTimeout(() => {
-        if (transactions.length > 0) {
-          // Apply the first transaction
-          applyTransaction(transactions[0]);
-          
-          // Update current index
-          setCurrentIndex(1);
-          
-          // Update transaction counter
-          setTxCounter(`1 / ${transactions.length}`);
-          
-          // Update transaction details
-          setTxDetails(JSON.stringify(transactions[0], null, 2));
-          
-          // Update time scale current time
-          newTimeScale.updateCurrentTime(transactions[0].timestamp);
-          
-          // Update button states
-          updateButtonStates();
-        }
-      }, 500); // Small delay to ensure UI is ready
+      // Do NOT automatically apply first transaction immediately
+      // Instead, just update UI to show that data is loaded but no visualization yet
+      setTxCounter(`0 / ${transactions.length}`);
+      setTxDetails("Data loaded. Click 'Next Transaction' to begin.");
+      
+      // Update button states
+      updateButtonStates();
     }
   }, [transactions]);
 
@@ -69,23 +77,38 @@ function App() {
 
   // Load example data
   const loadExampleData = () => {
-    setTransactions(exampleTransactions);
+    try {
+      // Prepare new data first before making changes to the UI
+      console.log("Loading example data:", exampleTransactions.length, "transactions");
+      
+      // Set transactions (this will trigger the useEffect that handles initialization)
+      setTransactions(exampleTransactions);
+      
+      // Update status
+      updateStatus(`Successfully loaded ${exampleTransactions.length} transactions from example data`);
+    } catch (error) {
+      console.error("Error loading example data:", error);
+      updateStatus("Error loading example data: " + error.message);
+    }
   };
 
   // Load journey data
   const loadJourneyData = () => {
     try {
-      // Convert journey format to application format
+      // Convert journey format to application format first
       const convertedData = convertJourneyFormat(journeyData);
       
-      // Set transactions
+      // Log conversion result
+      console.log("Converted journey data:", convertedData.length, "transactions");
+      
+      // Set transactions (this will trigger the useEffect that handles initialization)
       setTransactions(convertedData);
       
       // Update status
       updateStatus(`Successfully loaded ${convertedData.length} transactions from journey.json`);
     } catch (error) {
       console.error("Error loading journey data:", error);
-      updateStatus("Error loading journey data");
+      updateStatus("Error loading journey data: " + error.message);
     }
   };
 
@@ -135,62 +158,87 @@ function App() {
 
   // Convert journey.json format to application format
   const convertJourneyFormat = (journeyData) => {
-    return journeyData.map(tx => {
-      // Create operations array based on changes in the journey data
-      const operations = [];
+    try {
+      console.log("Converting journey data:", journeyData.length, "transactions");
       
-      // Process node creations
-      if (tx.changes && tx.changes.nodes && tx.changes.nodes.created) {
-        tx.changes.nodes.created.forEach(node => {
-          operations.push({
-            type: 'create_node',
-            data: {
-              id: node.id,
-              labels: node.labels,
-              properties: node.properties
+      return journeyData.map(tx => {
+        // Create operations array based on changes in the journey data
+        const operations = [];
+        
+        // Process node creations
+        if (tx.changes && tx.changes.nodes && tx.changes.nodes.created) {
+          tx.changes.nodes.created.forEach(node => {
+            // Ensure node has required properties
+            if (!node.id) {
+              console.warn("Node missing id:", node);
+              return;
             }
+            
+            operations.push({
+              type: 'create_node',
+              data: {
+                id: node.id,
+                labels: node.labels || [],
+                properties: node.properties || {}
+              }
+            });
           });
-        });
-      }
-      
-      // Process node modifications
-      if (tx.changes && tx.changes.nodes && tx.changes.nodes.modified) {
-        tx.changes.nodes.modified.forEach(node => {
-          operations.push({
-            type: 'update_node',
-            data: {
-              id: node.id,
-              labels: node.labels,
-              properties: node.properties
+        }
+        
+        // Process node modifications
+        if (tx.changes && tx.changes.nodes && tx.changes.nodes.modified) {
+          tx.changes.nodes.modified.forEach(node => {
+            // Ensure node has required properties
+            if (!node.id) {
+              console.warn("Modified node missing id:", node);
+              return;
             }
+            
+            operations.push({
+              type: 'update_node',
+              data: {
+                id: node.id,
+                labels: node.labels || [],
+                properties: node.properties || {}
+              }
+            });
           });
-        });
-      }
-      
-      // Process relationship creations
-      if (tx.changes && tx.changes.relationships && tx.changes.relationships.created) {
-        tx.changes.relationships.created.forEach(rel => {
-          operations.push({
-            type: 'create_relationship',
-            data: {
-              id: rel.id,
-              startNodeId: rel.startNodeId,
-              endNodeId: rel.endNodeId,
-              type: rel.type,
-              properties: rel.properties
+        }
+        
+        // Process relationship creations
+        if (tx.changes && tx.changes.relationships && tx.changes.relationships.created) {
+          tx.changes.relationships.created.forEach(rel => {
+            // Ensure relationship has required properties
+            if (!rel.id || !rel.startNodeId || !rel.endNodeId) {
+              console.warn("Relationship missing required properties:", rel);
+              return;
             }
+            
+            operations.push({
+              type: 'create_relationship',
+              data: {
+                id: rel.id,
+                startNodeId: rel.startNodeId,
+                endNodeId: rel.endNodeId,
+                type: rel.type || 'RELATED_TO',
+                properties: rel.properties || {}
+              }
+            });
           });
-        });
-      }
-      
-      return {
-        timestamp: tx.timestamp,
-        txId: tx.id,
-        query: tx.query,
-        summary: tx.summary,
-        operations: operations
-      };
-    });
+        }
+        
+        return {
+          timestamp: tx.timestamp,
+          txId: tx.id,
+          query: tx.query,
+          summary: tx.summary,
+          operations: operations
+        };
+      });
+    } catch (error) {
+      console.error("Error converting journey data:", error);
+      throw error;
+    }
   };
 
   // Update status message
@@ -237,26 +285,112 @@ function App() {
     
     // Decrement current index
     const newIndex = currentIndex - 1;
-    setCurrentIndex(newIndex);
     
-    // Replay all transactions up to the new index
-    resetVisualization(false);
+    // Get the current transaction details to show
+    const txToShow = transactions[newIndex - 1] || null;
     
-    // Apply transactions one by one
-    for (let i = 0; i < newIndex; i++) {
-      applyTransaction(transactions[i]);
+    try {
+      // Create new graph state by applying transactions
+      let newNodes = [];
+      let newEdges = [];
+      const tempEdgeCount = new Map();
+      
+      // Apply each transaction up to the new index
+      for (let i = 0; i < newIndex; i++) {
+        if (!transactions[i] || !transactions[i].operations) continue;
+        
+        transactions[i].operations.forEach(op => {
+          if (op.type === 'create_node') {
+            // Add node if it doesn't exist
+            if (!newNodes.some(n => n.id === op.data.id)) {
+              newNodes.push({
+                id: op.data.id,
+                label: op.data.properties?.name || op.data.properties?.title || op.data.id,
+                color: getNodeColor(op.data.labels),
+                title: formatNodeTooltip(op.data),
+                data: op.data
+              });
+            }
+          } 
+          else if (op.type === 'update_node') {
+            // Update existing node
+            const nodeIndex = newNodes.findIndex(n => n.id === op.data.id);
+            if (nodeIndex !== -1) {
+              newNodes[nodeIndex] = {
+                ...newNodes[nodeIndex],
+                label: op.data.properties?.name || op.data.properties?.title || op.data.id,
+                color: getNodeColor(op.data.labels),
+                title: formatNodeTooltip(op.data),
+                data: op.data
+              };
+            }
+          }
+          else if (op.type === 'create_relationship') {
+            // Add edge if it doesn't exist
+            if (!newEdges.some(e => e.id === op.data.id)) {
+              // Get edge styling
+              const edgeSettings = getEdgeSettings(op.data.startNodeId, op.data.endNodeId, op.data.type);
+              
+              // Handle edge count for multiple edges
+              const edgePair = `${op.data.startNodeId}-${op.data.endNodeId}`;
+              const count = tempEdgeCount.get(edgePair) || 0;
+              tempEdgeCount.set(edgePair, count + 1);
+              
+              // Create new edge
+              const newEdge = {
+                id: op.data.id,
+                from: op.data.startNodeId,
+                to: op.data.endNodeId,
+                label: op.data.type,
+                title: formatEdgeTooltip(op.data),
+                data: op.data,
+                ...edgeSettings
+              };
+              
+              // Add smooth curve if multiple edges
+              if (count > 0) {
+                newEdge.smooth = {
+                  type: 'curvedCW',
+                  roundness: 0.2 + (count * 0.1)
+                };
+              }
+              
+              newEdges.push(newEdge);
+            }
+          }
+        });
+      }
+      
+      // Update edge count reference
+      edgeCountRef.current = tempEdgeCount;
+      
+      // Update all state at once to prevent flicker/loading
+      setNodes(newNodes);
+      setEdges(newEdges);
+      setCurrentIndex(newIndex);
+      
+      // Update transaction counter
+      updateTxCounter();
+      
+      // Update transaction details
+      if (txToShow) {
+        setTxDetails(JSON.stringify(txToShow, null, 2));
+        if (timeScale) {
+          timeScale.updateCurrentTime(txToShow.timestamp);
+        }
+      } else {
+        setTxDetails("No transaction applied yet.");
+      }
+      
+      // Update button states
+      updateButtonStates();
+      
+      // Update status
+      updateStatus("Reverted to previous transaction");
+    } catch (error) {
+      console.error("Error in previous transaction:", error);
+      updateStatus("Error reverting to previous transaction");
     }
-    
-    // Update transaction counter
-    updateTxCounter();
-    
-    // Update transaction details
-    updateTransactionDetails();
-    
-    // Update button states
-    updateButtonStates();
-    
-    updateStatus("Reverted to previous transaction");
   };
 
   // Apply a single transaction to the graph
@@ -497,130 +631,325 @@ function App() {
   };
 
   // Range slider change handler
-  const handleRangeChange = (leftPos, rightPos) => {
+  const handleRangeChange = (minTimestamp, maxTimestamp) => {
     if (!timeScale || !transactions.length) return;
     
-    const minTime = timeScale.sliderToTimestamp(leftPos);
-    const maxTime = timeScale.sliderToTimestamp(rightPos);
-    
-    // Get transactions in range
-    const txIndexes = timeScale.getTransactionsInRange(transactions, minTime, maxTime);
+    // Get transactions in range (the timestamps are already in milliseconds)
+    const txIndexes = timeScale.getTransactionsInRange(transactions, minTimestamp, maxTimestamp);
     
     // Filter transactions for display
     if (txIndexes.length > 0) {
-      updateStatus(`Showing ${txIndexes.length} transactions in selected time range`);
+      // Update status
+      const startTime = new Date(minTimestamp).toLocaleTimeString();
+      const endTime = new Date(maxTimestamp).toLocaleTimeString();
+      updateStatus(`${txIndexes.length} transactions between ${startTime} and ${endTime}`);
+      
+      // Reset visualization while preserving edge counts for proper curves
+      resetVisualization(false, true);
+      
+      // Build a cumulative view of all transactions in the range
+      const newNodes = new Map();
+      const newEdges = new Map();
+      
+      // Track edge counts between node pairs for proper curves
+      const edgeCountMap = new Map();
+      
+      // Process all transactions in the selected range
+      txIndexes.forEach(index => {
+        const tx = transactions[index];
+        
+        // Process each operation in the transaction
+        tx.operations.forEach(op => {
+          if (op.type === 'create_node' || op.type === 'update_node') {
+            // Create or update node in our map
+            newNodes.set(op.data.id, {
+              id: op.data.id,
+              label: op.data.properties?.name || op.data.properties?.title || op.data.id,
+              color: getNodeColor(op.data.labels),
+              title: formatNodeTooltip(op.data),
+              data: op.data
+            });
+          } else if (op.type === 'create_relationship') {
+            // Create edge in our map
+            if (!newEdges.has(op.data.id)) {
+              // Get edge styling
+              const edgeSettings = getEdgeSettings(op.data.startNodeId, op.data.endNodeId, op.data.type);
+              
+              // Handle edge count for multiple edges between same nodes
+              const edgePair = `${op.data.startNodeId}-${op.data.endNodeId}`;
+              const count = edgeCountMap.get(edgePair) || 0;
+              edgeCountMap.set(edgePair, count + 1);
+              
+              // Create new edge object
+              const newEdge = {
+                id: op.data.id,
+                from: op.data.startNodeId,
+                to: op.data.endNodeId,
+                label: op.data.type,
+                title: formatEdgeTooltip(op.data),
+                data: op.data,
+                ...edgeSettings
+              };
+              
+              // Add smooth curve if multiple edges
+              if (count > 0) {
+                newEdge.smooth = {
+                  type: 'curvedCW',
+                  roundness: 0.2 + (count * 0.1) // Increase curve for each additional edge
+                };
+              }
+              
+              newEdges.set(op.data.id, newEdge);
+            }
+          }
+          // Handle delete operations if needed
+        });
+      });
+      
+      // Ensure all nodes referenced by edges exist
+      newEdges.forEach(edge => {
+        // If an edge references a node that doesn't exist in our selection,
+        // create a placeholder node
+        if (!newNodes.has(edge.from)) {
+          newNodes.set(edge.from, {
+            id: edge.from,
+            label: edge.from,
+            color: "#cccccc", // Gray color for placeholder nodes
+            title: "Referenced node"
+          });
+        }
+        
+        if (!newNodes.has(edge.to)) {
+          newNodes.set(edge.to, {
+            id: edge.to,
+            label: edge.to,
+            color: "#cccccc", // Gray color for placeholder nodes
+            title: "Referenced node"
+          });
+        }
+      });
+      
+      // Convert maps to arrays for state update
+      const nodesToShow = Array.from(newNodes.values());
+      const edgesToShow = Array.from(newEdges.values());
+      
+      // Update the graph
+      setNodes(nodesToShow);
+      setEdges(edgesToShow);
+      
+      // Fit the view to show all nodes
+      if (networkRef.current) {
+        setTimeout(() => {
+          networkRef.current.fit({
+            animation: {
+              duration: 500,
+              easingFunction: 'easeInOutQuad'
+            }
+          });
+        }, 100);
+      }
     } else {
       updateStatus("No transactions in selected time range");
+      
+      // Clear the graph if no transactions found
+      resetVisualization(true, false);
     }
   };
 
   return (
-    <div className="container">
-      <div className="sidebar">
-        <div className="controls">
-          <h2>Neo4j Transaction Animator</h2>
-          
-          <div className="control-group">
-            <h3>Data</h3>
-            <div className="control-buttons">
-              <button 
-                id="load-example-btn" 
-                onClick={loadExampleData}
-                className="primary-button"
-              >
-                Load Example Data
-              </button>
-              <button 
-                id="load-journey-btn" 
-                onClick={loadJourneyData}
-                className="primary-button"
-              >
-                Load Journey Data
-              </button>
-              <input 
-                type="file" 
-                id="file-input" 
-                accept=".json" 
+    <Container maxWidth="xl" sx={{ 
+      height: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      padding: 2,
+      gap: 2
+    }}>
+      <Paper elevation={3} sx={{ padding: 2 }}>
+        <Typography variant="h4" component="h1" gutterBottom align="center">
+          Neo4j Transaction Animator
+        </Typography>
+        
+        <Box sx={{ marginBottom: 2 }}>
+          <Typography variant="h6" component="h2" gutterBottom>
+            Data
+          </Typography>
+          <Stack direction="row" spacing={2} sx={{ 
+            flexWrap: 'wrap', 
+            gap: 1,
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Button 
+              variant="contained" 
+              startIcon={<DatasetIcon />} 
+              onClick={loadExampleData}
+            >
+              Load Example Data
+            </Button>
+            <Button 
+              variant="contained" 
+              startIcon={<DatasetIcon />}
+              onClick={loadJourneyData}
+            >
+              Load Journey Data
+            </Button>
+            <Button
+              variant="contained"
+              component="label"
+              startIcon={<UploadFileIcon />}
+            >
+              Upload JSON
+              <input
+                type="file"
+                hidden
+                accept=".json"
                 onChange={handleFileUpload}
               />
-              <label htmlFor="file-input" className="file-input-label">
-                Upload JSON
-              </label>
-              <button 
-                id="reset-btn" 
-                onClick={() => resetVisualization()} 
-                disabled={transactions.length === 0}
-                className="secondary-button"
-              >
-                Reset Graph
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+            </Button>
+            <Button 
+              variant="outlined" 
+              startIcon={<RestartAltIcon />}
+              onClick={() => resetVisualization()} 
+              disabled={transactions.length === 0}
+            >
+              Reset Graph
+            </Button>
+          </Stack>
+        </Box>
+
+        <Typography variant="subtitle1" align="center">
+          Transaction: <strong>{txCounter}</strong>
+        </Typography>
+      </Paper>
       
-      <div className="transaction-info">
-        Transaction: <span id="tx-counter">{txCounter}</span>
-      </div>
-      
-      <div className="graph-wrapper">
-        <div id="graph-container" className="graph-container">
+      <Paper elevation={3} sx={{ 
+        flexGrow: 1, 
+        position: 'relative', 
+        overflow: 'hidden',
+        marginY: 2,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '50vh', // Set a fixed minimum height for the graph container
+        minHeight: '400px'
+      }}>
+        <Box sx={{ 
+          width: '100%', 
+          height: '100%', 
+          position: 'relative',
+          flex: 1,
+          display: 'flex'
+        }}>
           <Graph 
             nodes={nodes} 
             edges={edges} 
             onNetworkReady={handleNetworkReady} 
           />
-        </div>
-        
-        <div className="graph-controls" id="graph-controls">
-          <div className="tooltip">
-            <button className="graph-control-btn" id="zoom-in-btn" onClick={zoomIn}>+</button>
-            <span className="tooltiptext">Zoom In</span>
-          </div>
-          <div className="tooltip">
-            <button className="graph-control-btn" id="zoom-out-btn" onClick={zoomOut}>−</button>
-            <span className="tooltiptext">Zoom Out</span>
-          </div>
-          <div className="tooltip">
-            <button className="graph-control-btn" id="recenter-btn" onClick={recenterView}>⊙</button>
-            <span className="tooltiptext">Recenter View</span>
-          </div>
-        </div>
-      </div>
+          
+          <Box sx={{ 
+            position: 'absolute', 
+            right: 16, 
+            top: '50%', 
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            zIndex: 10
+          }}>
+            <Tooltip title="Zoom In" arrow placement="left">
+              <IconButton 
+                color="primary" 
+                onClick={zoomIn}
+                sx={{ bgcolor: 'background.paper' }}
+              >
+                <AddIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Zoom Out" arrow placement="left">
+              <IconButton 
+                color="primary" 
+                onClick={zoomOut}
+                sx={{ bgcolor: 'background.paper' }}
+              >
+                <RemoveIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Recenter View" arrow placement="left">
+              <IconButton 
+                color="primary" 
+                onClick={recenterView}
+                sx={{ bgcolor: 'background.paper' }}
+              >
+                <CenterFocusStrongIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+      </Paper>
 
-      <div className="navigation-buttons">
-        <button 
-          id="prev-btn" 
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, marginY: 2 }}>
+        <Button 
+          variant="contained"
+          startIcon={<NavigateBeforeIcon />}
           onClick={previousTransaction} 
           disabled={currentIndex <= 0}
+          size="large"
         >
           Previous Transaction
-        </button>
-        <button 
-          id="next-btn" 
+        </Button>
+        <Button 
+          variant="contained"
+          endIcon={<NavigateNextIcon />}
           onClick={nextTransaction} 
           disabled={currentIndex >= transactions.length}
+          size="large"
         >
           Next Transaction
-        </button>
-      </div>
+        </Button>
+      </Box>
       
       {timeScale && (
-        <RangeSlider 
-          formatLabel={(val) => timeScale.formatTimestamp(val)}
-          formatCurrentTime={(val) => timeScale.formatCurrentTime(val)}
-          currentTime={currentIndex > 0 && transactions.length > 0 ? 
-            transactions[currentIndex - 1]?.timestamp : null}
-          onRangeChange={handleRangeChange}
-        />
+        <Box sx={{ marginY: 2 }}>
+          <RangeSlider 
+            minValue={timeScale.startTime}
+            maxValue={timeScale.endTime}
+            formatLabel={(val) => timeScale.formatTimestamp(val)}
+            formatCurrentTime={(val) => timeScale.formatCurrentTime(val)}
+            currentTime={currentIndex > 0 && transactions.length > 0 ? 
+              transactions[currentIndex - 1]?.timestamp : null}
+            onRangeChange={handleRangeChange}
+          />
+        </Box>
       )}
       
-      <div className="details-container">
-        <h3>Transaction Details</h3>
-        <pre id="tx-details">{txDetails}</pre>
-        <div id="status" className="status">{status}</div>
-      </div>
-    </div>
+      <Paper elevation={3} sx={{ marginTop: 2, padding: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Transaction Details
+        </Typography>
+        <Box 
+          component="pre" 
+          sx={{ 
+            maxHeight: '200px', 
+            overflow: 'auto',
+            bgcolor: 'grey.100',
+            padding: 2,
+            borderRadius: 1,
+            fontSize: '0.875rem'
+          }}
+        >
+          {txDetails}
+        </Box>
+        <Box 
+          sx={{ 
+            height: '24px', 
+            color: 'primary.main', 
+            fontWeight: 'bold',
+            marginTop: 1
+          }}
+        >
+          {status}
+        </Box>
+      </Paper>
+    </Container>
   );
 }
 
